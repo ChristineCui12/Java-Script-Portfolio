@@ -76,7 +76,7 @@ async function initApp() {
 
     // 3. 加载 GeoJSON 数据
     try {
-        const response = await fetch('poi_new2_final.geojson');
+        const response = await fetch('poi_new2_updated_with_pics.geojson');
         const geoJson = await response.json();
         
         poiData = geoJson.features.map(f => {

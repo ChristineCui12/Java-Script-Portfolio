@@ -1,5 +1,8 @@
-// 1. 数据配置 (模拟)
-// isWishlist: true -> 彩色 (Wishlist), false -> 灰色 (Others)
+// ★★★ 请在此处填入你的 Mapbox Access Token ★★★
+// 如果留空，代码会自动降级使用直线连接，不会报错。
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic2NvdGhpcyIsImEiOiJjaWp1Y2ltYmUwMDBicmJrdDQ4ZDBkaGN4In0.sbihZCZJ56-fsFNKHXF8YQ'; 
+
+// 1. 数据配置
 const poiData = [
     { id: 1, name: "Jade Dragon Snow Mtn", lat: 27.09, lng: 100.20, price: 40, ele: 4600, cat: "Nature", isWishlist: true }, 
     { id: 2, name: "Lijiang Old Town", lat: 26.87, lng: 100.23, price: 12, ele: 2400, cat: "Culture", isWishlist: true },
@@ -10,6 +13,8 @@ const poiData = [
     { id: 7, name: "Erhai Lake", lat: 25.69, lng: 100.16, price: 0, ele: 1972, cat: "Nature", isWishlist: false }
 ];
 
+let dayCount = 3; // 当前总天数
+
 // 2. 初始化地图
 const map = L.map('map', { zoomControl: false }).setView([26.8, 100.2], 8);
 L.control.zoom({ position: 'topleft' }).addTo(map);
@@ -17,12 +22,11 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').ad
 
 let routeLayer = L.layerGroup().addTo(map);
 
-// 3. 渲染 Marker (灰 vs 彩)
+// 3. 渲染 Marker (动态 Popup 内容)
 poiData.forEach(p => {
     let cssClass = 'marker-gray';
     let iconHtml = '<i class="fa-solid fa-location-dot"></i>';
     
-    // 如果在 Wishlist 中，给彩色
     if (p.isWishlist) {
         cssClass = `marker-wishlist cat-${p.cat}`; 
         if(p.cat === 'Nature') iconHtml = '<i class="fa-solid fa-mountain"></i>';
@@ -39,17 +43,31 @@ poiData.forEach(p => {
 
     const marker = L.marker([p.lat, p.lng], { icon: icon }).addTo(map);
 
-    const popupHtml = `
-        <div style="text-align:center">
-            <b>${p.name}</b><br>
-            <span style="font-size:12px;color:#666">Ele: ${p.ele}m | Cost: $${p.price}</span><br>
-            <button class="popup-btn" onclick="addToPlan(${p.id})">+ Add to Day 1</button>
-        </div>
-    `;
-    marker.bindPopup(popupHtml);
+    // ★★★ 关键修改：动态绑定 Popup ★★★
+    // 每次点击时，根据当前的 dayCount 生成下拉选项
+    marker.bindPopup(() => {
+        let optionsHtml = '';
+        for(let i=1; i<=dayCount; i++) {
+            optionsHtml += `<option value="day${i}">Day ${i}</option>`;
+        }
+
+        return `
+            <div style="text-align:center; min-width:160px;">
+                <h4 style="margin:0 0 5px 0;color:#1a3c5a;">${p.name}</h4>
+                <p style="margin:0 0 8px 0;font-size:12px;color:#666;">Ele: ${p.ele}m | Cost: $${p.price}</p>
+                
+                <div class="popup-controls">
+                    <select id="targetDaySelect-${p.id}" class="popup-day-select">
+                        ${optionsHtml}
+                    </select>
+                    <button class="popup-add-btn" onclick="addToPlan(${p.id})">Add</button>
+                </div>
+            </div>
+        `;
+    });
 });
 
-// 4. 日期计算逻辑
+// 4. 日期计算逻辑 (Update Default Date)
 const dateFrom = document.getElementById('dateFrom');
 const dateTo = document.getElementById('dateTo');
 const totalDaysDisplay = document.getElementById('totalDaysDisplay');
@@ -68,15 +86,18 @@ function updateDays() {
 }
 dateFrom.addEventListener('change', updateDays);
 dateTo.addEventListener('change', updateDays);
-updateDays(); // Init
+updateDays(); 
 
-// 5. 添加地点逻辑
+// 5. 添加地点逻辑 (读取下拉框的值)
 window.addToPlan = function(id) {
     const p = poiData.find(x => x.id === id);
     if (!p) return;
 
-    const list = document.getElementById('day1'); // 默认加到 Day 1
-    // 移除空状态提示
+    // ★★★ 读取 Popup 里的 Select 值 ★★★
+    const selectEl = document.getElementById(`targetDaySelect-${id}`);
+    const targetDayId = selectEl ? selectEl.value : 'day1';
+    const list = document.getElementById(targetDayId);
+
     const empty = list.querySelector('.empty-state');
     if (empty) empty.style.display = 'none';
 
@@ -101,7 +122,7 @@ window.addToPlan = function(id) {
 
     list.appendChild(li);
     map.closePopup();
-    updateGlobalState(true); // true 代表是新添加的操作
+    updateGlobalState(true); 
 };
 
 window.removePoint = function(el) {
@@ -109,8 +130,7 @@ window.removePoint = function(el) {
     updateGlobalState(false);
 };
 
-// 6. 新增 Add Day 功能
-let dayCount = 3;
+// 6. 新增 Add Day
 window.addNewDay = function() {
     dayCount++;
     const container = document.getElementById('daysContainer');
@@ -125,7 +145,6 @@ window.addNewDay = function() {
     `;
     container.appendChild(div);
     
-    // 初始化拖拽
     new Sortable(document.getElementById(`day${dayCount}`), {
         group: 'shared', animation: 150, onEnd: () => updateGlobalState(false)
     });
@@ -138,12 +157,11 @@ window.addNewDay = function() {
     });
 });
 
-// 8. 全局状态更新 (Budget & Route & Chart)
-function updateGlobalState(isNewAdd) {
+// 8. 全局状态更新
+async function updateGlobalState(isNewAdd) {
     let totalCost = 0;
     let points = [];
     
-    // 遍历所有点
     document.querySelectorAll('.trip-item').forEach(item => {
         const price = parseInt(item.dataset.price);
         totalCost += price;
@@ -155,39 +173,61 @@ function updateGlobalState(isNewAdd) {
         });
     });
 
-    // Update Text
     const costEl = document.getElementById('totalCostDisplay');
     costEl.innerText = `$${totalCost}`;
     document.getElementById('totalStopsDisplay').innerText = points.length;
 
-    // ★★★ 预算逻辑 ★★★
     const budgetLimit = parseInt(document.getElementById('budgetInput').value) || 0;
-    
     if (totalCost > budgetLimit) {
-        costEl.classList.add('over-budget'); // 变红
-        // 只有在新增操作导致超支时弹窗，防止拖拽时频繁弹窗
-        if (isNewAdd) {
-            alert(`⚠️ WARNING: Over Budget!\nCurrent: $${totalCost}\nLimit: $${budgetLimit}`);
-        }
+        costEl.classList.add('over-budget');
+        if (isNewAdd) alert(`⚠️ Over Budget!\nCurrent: $${totalCost} / Limit: $${budgetLimit}`);
     } else {
         costEl.classList.remove('over-budget');
     }
 
-    // Update Map Route
-    updateRoute(points);
-    
-    // Update Chart
+    // 使用 Mapbox API 更新路线
+    await updateRoute(points);
     updateChart(points);
 }
 
-// 监听预算输入框变化
 document.getElementById('budgetInput').addEventListener('input', () => updateGlobalState(false));
 
-function updateRoute(points) {
+// ★★★ 9. Mapbox Routing Logic (核心更新) ★★★
+async function updateRoute(points) {
     routeLayer.clearLayers();
     if(points.length < 2) return;
-    const latlngs = points.map(p => [p.lat, p.lng]);
-    L.polyline(latlngs, { color: '#4cd137', weight: 4 }).addTo(routeLayer);
+
+    // 如果没有 Token，使用直线降级
+    if (!MAPBOX_TOKEN || MAPBOX_TOKEN === 'YOUR_TOKEN_HERE') {
+        console.warn("No Mapbox Token provided. Using simple polylines.");
+        const latlngs = points.map(p => [p.lat, p.lng]);
+        L.polyline(latlngs, { color: '#4cd137', weight: 4 }).addTo(routeLayer);
+        return;
+    }
+
+    // 构建 Mapbox API 请求
+    // 格式: lng,lat;lng,lat
+    const coordsString = points.map(p => `${p.lng},${p.lat}`).join(';');
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordsString}?geometries=geojson&access_token=${MAPBOX_TOKEN}`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.routes && data.routes.length > 0) {
+            const routeGeoJSON = data.routes[0].geometry;
+            
+            // 绘制真实路线
+            L.geoJSON(routeGeoJSON, {
+                style: { color: '#4cd137', weight: 5, opacity: 0.8 }
+            }).addTo(routeLayer);
+        }
+    } catch (e) {
+        console.error("Mapbox API Error:", e);
+        // 出错时回退到直线
+        const latlngs = points.map(p => [p.lat, p.lng]);
+        L.polyline(latlngs, { color: '#4cd137', weight: 4 }).addTo(routeLayer);
+    }
 }
 
 // Chart

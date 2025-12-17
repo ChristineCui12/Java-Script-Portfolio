@@ -62,7 +62,7 @@ async function initInteractive() {
     try {
         // 1.3 并行加载：POI数据 和 Wishlist数据
         const [poiResponse, wishlistDoc] = await Promise.all([
-            fetch('poi_new2_final.geojson'),
+            fetch('poi_new2_updated_with_pics.geojson'),
             getDoc(doc(db, "users", CURRENT_USER_ID))
         ]);
 

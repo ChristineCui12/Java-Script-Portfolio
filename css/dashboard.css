@@ -135,7 +135,7 @@ h3::before {
 
 /* ★★★ Rank Chart 专用大高度 ★★★ */
 .rank-chart-box {
-    height: 320px !important; /* 增加到 320px 以容纳 Top 10 */
+    height: 320px !important; 
 }
 
 /* =========================================
@@ -148,19 +148,103 @@ h3::before {
     position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
     width: 90%; max-width: 620px;
     background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px);
-    border-radius: 16px; padding: 10px 20px;
-    display: flex; justify-content: space-between; align-items: center;
+    border-radius: 16px; padding: 15px 20px;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: flex-start; /* 改为 flex-start 以适应不同高度 */
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     z-index: 500;
 }
 
-.map-filter-group { display: flex; align-items: center; gap: 6px; }
+/* 左侧控制组：包含 Filter 和 Search */
+.left-control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1; /* 占据剩余空间 */
+    margin-right: 20px;
+}
+
+.map-filter-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .map-filter-label { font-size: 0.8rem; font-weight: 700; color: var(--color-dark-blue); margin-right: 5px; }
 .tag { padding: 5px 12px; font-size: 0.75rem; border-radius: 12px; cursor: pointer; background: #f0f2f5; color: #666; transition: 0.2s; border: 1px solid transparent; }
 .tag.active { background: var(--color-teal); color: white; }
 
-.map-slider-group { display: flex; align-items: center; gap: 10px; width: 200px; }
-.map-slider-label { font-size: 0.8rem; font-weight: 700; color: var(--color-orange); width: 70px; }
+/* ★★★ 新增：搜索栏样式 ★★★ */
+.search-wrapper {
+    position: relative;
+    width: 100%;
+}
+.search-wrapper input {
+    width: 100%;
+    padding: 8px 10px 8px 32px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: #f9f9f9;
+    font-family: inherit;
+    font-size: 0.8rem;
+    transition: 0.2s;
+}
+.search-wrapper input:focus {
+    outline: none;
+    border-color: var(--color-teal);
+    background: white;
+    box-shadow: 0 0 0 2px rgba(52, 148, 166, 0.1);
+}
+.search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #999;
+    font-size: 0.8rem;
+    pointer-events: none;
+}
+
+/* 搜索结果下拉列表 */
+.search-results-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    margin: 5px 0 0 0;
+    padding: 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none; /* 默认隐藏 */
+    border: 1px solid #eee;
+}
+.search-results-list.show { display: block; }
+.search-item {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    border-bottom: 1px solid #f5f5f5;
+    display: flex;
+    justify-content: space-between;
+}
+.search-item:last-child { border-bottom: none; }
+.search-item:hover { background: #f0f7f8; color: var(--color-teal); }
+.search-item-cat {
+    font-size: 0.7rem; color: #999;
+}
+
+/* 右侧 Slider */
+.map-slider-group { 
+    display: flex; 
+    align-items: center; 
+    gap: 10px; 
+    width: 180px; 
+    flex-shrink: 0; 
+    margin-top: 5px; /* 对齐微调 */
+}
+.map-slider-label { font-size: 0.8rem; font-weight: 700; color: var(--color-orange); width: 60px; }
 .map-slider-group input[type=range] { flex: 1; accent-color: var(--color-orange); cursor: pointer; }
 
 /* Reset View 按钮 (右下角) */
@@ -303,7 +387,7 @@ h3::before {
 .marker-wishlist.cat-Stay { background: #e0b341; }
 
 /* =========================================
-   9. 新增：图例样式 (Map Legend)
+   9. 图例样式 (Map Legend)
    ========================================= */
 .legend-row {
     display: flex;

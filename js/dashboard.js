@@ -20,23 +20,20 @@ const CURRENT_USER_ID = "user_demo_001";
 // 1. 数据配置 & 辅助变量
 // =========================================
 
-// 类别颜色映射 (用于 Chart)
 const categoryColors = {
-    "Nature": "#3494a6",   // Teal
-    "Culture": "#1a3c5a",  // Dark Blue
-    "Food": "#bf4328",     // Orange
-    "Stay": "#e0b341"      // Yellow
+    "Nature": "#3494a6",   
+    "Culture": "#1a3c5a",  
+    "Food": "#bf4328",     
+    "Stay": "#e0b341"      
 };
 
-// 月份与 Activity 标签的映射关系
 const activityMapping = {
-    "Floral & Splash": [3, 4, 5],     // 春季
-    "Mushroom Hunting": [6, 7, 8],    // 夏季
-    "Golden Autumn": [9, 10, 11],     // 秋季
-    "Snow & Sun": [12, 1, 2]          // 冬季
+    "Floral & Splash": [3, 4, 5],     
+    "Mushroom Hunting": [6, 7, 8],    
+    "Golden Autumn": [9, 10, 11],     
+    "Snow & Sun": [12, 1, 2]          
 };
 
-// 月份主题显示内容
 const monthlyThemes = {
     4: { title: "Floral & Splash", desc: "Experience the Water Splashing Festival and blooming flowers.", img: "https://images.unsplash.com/photo-1527236582914-874288b49520?q=80&w=2071" },
     7: { title: "Mushroom Hunting", desc: "The rainy season brings delicious wild mushrooms.", img: "https://images.unsplash.com/photo-1627387397274-04646a29792a?q=80&w=1974" },
@@ -44,7 +41,6 @@ const monthlyThemes = {
     12: { title: "Snow & Sun", desc: "Enjoy the snow-capped mountains under the warm sun.", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?q=80&w=2070" }
 };
 
-// 图片占位符
 const categoryImages = {
     "Stay": "https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=2070",
     "Food": "https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=2070",
@@ -55,7 +51,7 @@ const categoryImages = {
 let poiData = []; 
 let userWishlist = new Set();
 let map, markers;
-let popChart = null; // Chart 实例
+let popChart = null; 
 let tempChart = null;
 
 // =========================================
@@ -63,7 +59,6 @@ let tempChart = null;
 // =========================================
 
 async function initApp() {
-    // 1. 初始化地图
     const INITIAL_CENTER = [24.5, 101.5]; 
     const INITIAL_ZOOM = 7;
     map = L.map('dash-map', { zoomControl: false }).setView(INITIAL_CENTER, INITIAL_ZOOM);
@@ -71,10 +66,10 @@ async function initApp() {
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
     markers = L.layerGroup().addTo(map);
 
-    // 2. 同步 Wishlist
+    loadBoundaries();
+
     await syncWishlist();
 
-    // 3. 加载 GeoJSON 数据
     try {
         const response = await fetch('poi_new2_updated_with_pics.geojson');
         const geoJson = await response.json();
@@ -82,12 +77,10 @@ async function initApp() {
         poiData = geoJson.features.map(f => {
             const p = f.properties;
             const cost = parseInt(p.Buget?.replace(/[^0-9]/g, '') || 0);
-            
-            // 整合所有 Activity
             const activities = [p.Activity, p.Activity2, p.Activity3, p.Activity4].filter(Boolean);
 
             return {
-                id: String(p.osm_id), // 统一转字符串
+                id: String(p.osm_id), 
                 name: p.name_E || p.name,
                 lat: f.geometry.coordinates[1],
                 lng: f.geometry.coordinates[0],
@@ -95,28 +88,77 @@ async function initApp() {
                 score: p.Score,
                 desc: p.Description,
                 img: p.Pic || categoryImages[p.Filter] || categoryImages['Nature'],
-                // 设施: [Wifi, Parking, Access, Dining]
                 fac: [p.Wifi, p.Parking, p.Accessibility, (p.Filter === 'Food' || p.Filter === 'Stay' ? 1 : 0)], 
                 link: p.Link,
-                tel: p.Tel_Number || "N/A", // 电话
-                time: p.Time || 1, // 游玩时间
+                tel: p.Tel_Number || "N/A", 
+                time: p.Time || 1, 
                 cost: cost,
                 activities: activities
             };
         });
 
-        // 4. 初始化图表 (空数据)
         initBaseCharts();
-
-        // 5. 渲染界面 (地图 + 第一次图表更新)
         renderMap();
-        updateMonth(6); // 默认 7月 (Index 6)
-        
-        // 6. 加载帖子
+        updateMonth(6); 
         loadAllPosts();
+        initSearch();
 
     } catch (error) {
         console.error("Failed to load POI data:", error);
+    }
+}
+
+// ★★★ 修改：加载云南行政区划 + 增强样式 + 英文翻译 ★★★
+async function loadBoundaries() {
+    try {
+        const response = await fetch('https://geo.datav.aliyun.com/areas_v3/bound/530000_full.json');
+        const data = await response.json();
+
+        // 中文 -> 英文 映射字典
+        const cityTranslations = {
+            "昆明市": "Kunming",
+            "曲靖市": "Qujing",
+            "玉溪市": "Yuxi",
+            "保山市": "Baoshan",
+            "昭通市": "Zhaotong",
+            "丽江市": "Lijiang",
+            "普洱市": "Pu'er",
+            "临沧市": "Lincang",
+            "楚雄彝族自治州": "Chuxiong",
+            "红河哈尼族彝族自治州": "Honghe",
+            "文山壮族苗族自治州": "Wenshan",
+            "西双版纳傣族自治州": "Xishuangbanna",
+            "大理白族自治州": "Dali",
+            "德宏傣族景颇族自治州": "Dehong",
+            "怒江傈僳族自治州": "Nujiang",
+            "迪庆藏族自治州": "Diqing"
+        };
+
+        L.geoJSON(data, {
+            style: {
+                color: '#636e72',    // 改为更深的石板灰 (原 #999)
+                weight: 1.2,         // 稍微加粗 (原 1)
+                opacity: 0.8,        // 透明度降低，显示更明显 (原 0.5)
+                dashArray: '5, 5',   
+                fillOpacity: 0       
+            },
+            onEachFeature: function(feature, layer) {
+                if (feature.properties && feature.properties.name) {
+                    const cnName = feature.properties.name;
+                    // 查字典，如果没有匹配则显示原中文名
+                    const enName = cityTranslations[cnName] || cnName;
+                    
+                    layer.bindTooltip(enName, {
+                        permanent: false, 
+                        direction: 'center',
+                        className: 'boundary-tooltip'
+                    });
+                }
+            }
+        }).addTo(map);
+
+    } catch (error) {
+        console.error("Could not load boundary data:", error);
     }
 }
 
@@ -130,7 +172,7 @@ async function syncWishlist() {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const list = docSnap.data().wishlist || [];
-            userWishlist = new Set(list.map(String)); // 确保存入 Set 的都是字符串
+            userWishlist = new Set(list.map(String)); 
         } else {
             await setDoc(docRef, { wishlist: [] });
         }
@@ -152,17 +194,15 @@ window.toggleWishlist = async function(btn, poiId) {
         btn.innerHTML = '<i class="fa-solid fa-heart"></i> Added!';
         await updateDoc(docRef, { wishlist: arrayUnion(poiIdStr) });
     }
-    renderMap(); // 重新渲染以改变图标
+    renderMap(); 
 };
 
 let activeFilters = new Set(['all']);
-let currentMonth = 7; // 默认7月
+let currentMonth = 7; 
 
-// ★★★ 核心渲染函数：地图 + 联动图表 ★★★
 function renderMap() {
     markers.clearLayers();
     
-    // 1. 获取当前月份对应的主题标签
     let currentThemeTag = null;
     for (const [tag, months] of Object.entries(activityMapping)) {
         if (months.includes(currentMonth)) {
@@ -171,40 +211,32 @@ function renderMap() {
         }
     }
 
-    // 2. 筛选出当前地图上要显示的点 (用于 Chart 计算)
     const visiblePois = [];
 
     poiData.forEach(p => {
-        // A. 类别筛选
         if (!activeFilters.has('all') && !activeFilters.has(p.cat)) return;
 
         visiblePois.push(p);
 
-        // B. 活动高亮逻辑 (Highlight Logic)
-        // 如果当前点包含当前月份的 Activity，则高亮；否则变暗
         let isActivityMatch = false;
         if (currentThemeTag && p.activities && p.activities.includes(currentThemeTag)) {
             isActivityMatch = true;
         }
 
-        // 定义样式：匹配的高亮，不匹配的半透明
         const opacity = isActivityMatch ? 1.0 : 0.4; 
         const radius = isActivityMatch ? 8 : 5;
-        // 如果是 Wishlist 里的点，始终不透明，但大小可以变化
         const finalOpacity = userWishlist.has(p.id) ? 1.0 : opacity;
 
         let marker;
         const isWishlisted = userWishlist.has(p.id);
 
         if (isWishlisted) {
-            // Wishlist 图标 (Interaction 风格)
             let iconHtml = '<i class="fa-solid fa-location-dot"></i>';
             if(p.cat === 'Nature') iconHtml = '<i class="fa-solid fa-mountain"></i>';
             if(p.cat === 'Culture') iconHtml = '<i class="fa-solid fa-landmark"></i>';
             if(p.cat === 'Food') iconHtml = '<i class="fa-solid fa-utensils"></i>';
             if(p.cat === 'Stay') iconHtml = '<i class="fa-solid fa-bed"></i>';
 
-            // 如果匹配活动，图标稍微放大
             const size = isActivityMatch ? 34 : 28;
             
             const customIcon = L.divIcon({
@@ -216,7 +248,6 @@ function renderMap() {
             marker = L.marker([p.lat, p.lng], { icon: customIcon });
 
         } else {
-            // 普通点
             let color = categoryColors[p.cat] || '#3494a6';
             
             marker = L.circleMarker([p.lat, p.lng], {
@@ -233,6 +264,8 @@ function renderMap() {
             maxWidth: 400, minWidth: 300, className: 'custom-popup-wrapper'
         });
 
+        p.markerRef = marker;
+
         marker.on('click', function() {
             map.flyTo([p.lat, p.lng], 13, { duration: 1.5 });
             window.loadPostsForLocation(p.id, p.name);
@@ -241,11 +274,9 @@ function renderMap() {
         markers.addLayer(marker);
     });
 
-    // 3. 更新排名图表 (只统计当前筛选出的点)
     updateRankChart(visiblePois);
 }
 
-// ★★★ 弹窗生成函数 (更新：大弹窗、时间和电话) ★★★
 function createPopupContent(poi, isAdded) {
     const btnClass = isAdded ? 'added' : '';
     const btnText = isAdded ? '<i class="fa-solid fa-heart"></i> Added!' : '<i class="fa-regular fa-heart"></i> Add to Wishlist';
@@ -263,7 +294,6 @@ function createPopupContent(poi, isAdded) {
         facHtml += `<i class="${iconsConfig[index].class} fac-item ${statusClass}" title="${iconsConfig[index].title}"></i>`;
     });
 
-    // 电话点击事件 (简单 Alert)
     const phoneOnClick = `alert('Telephone Number: ${poi.tel}')`;
 
     return `
@@ -301,10 +331,62 @@ function createPopupContent(poi, isAdded) {
 }
 
 // =========================================
-// 4. UI 交互 & 图表
+// 4. UI 交互 & 图表 & 搜索
 // =========================================
 
-// Filter Tags 点击
+function initSearch() {
+    const searchInput = document.getElementById('poiSearchInput');
+    const resultsList = document.getElementById('searchResults');
+
+    searchInput.addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase();
+        resultsList.innerHTML = '';
+        
+        if (val.length < 1) {
+            resultsList.classList.remove('show');
+            return;
+        }
+
+        const matches = poiData.filter(p => p.name.toLowerCase().includes(val)).slice(0, 6); 
+
+        if (matches.length > 0) {
+            matches.forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'search-item';
+                li.innerHTML = `<span>${p.name}</span> <span class="search-item-cat">${p.cat}</span>`;
+                li.onclick = () => {
+                    searchInput.value = '';
+                    resultsList.classList.remove('show');
+                    
+                    if(!activeFilters.has('all') && !activeFilters.has(p.cat)) {
+                        activeFilters.clear(); activeFilters.add('all');
+                        document.querySelectorAll('.tag').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
+                        renderMap(); 
+                    }
+
+                    map.flyTo([p.lat, p.lng], 14, { duration: 1.5 });
+                    setTimeout(() => {
+                        if (p.markerRef) {
+                            p.markerRef.openPopup();
+                            window.loadPostsForLocation(p.id, p.name);
+                        }
+                    }, 1000);
+                };
+                resultsList.appendChild(li);
+            });
+            resultsList.classList.add('show');
+        } else {
+            resultsList.classList.remove('show');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-wrapper')) {
+            resultsList.classList.remove('show');
+        }
+    });
+}
+
 document.querySelectorAll('.tag').forEach(tag => {
     tag.addEventListener('click', (e) => {
         const selectedCat = e.target.dataset.cat;
@@ -321,12 +403,10 @@ document.querySelectorAll('.tag').forEach(tag => {
             t.classList.toggle('active', activeFilters.has(cat));
         });
         
-        // 重新渲染地图和图表
         renderMap();
     });
 });
 
-// Month Slider
 const monthSlider = document.getElementById('monthSlider');
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -334,7 +414,6 @@ function updateMonth(mIndex) {
     currentMonth = mIndex + 1;
     document.getElementById('monthDisplay').innerText = monthNames[mIndex];
 
-    // 更新左侧主题卡片
     let themeKey = 4;
     if (monthlyThemes[currentMonth]) themeKey = currentMonth;
     else if ([12, 1, 2].includes(currentMonth)) themeKey = 12;
@@ -347,7 +426,6 @@ function updateMonth(mIndex) {
     document.getElementById('themeDesc').innerText = theme.desc;
     document.getElementById('themeImg').src = theme.img;
 
-    // 更新气温图表的高亮
     if (tempChart) {
         const pointColors = new Array(12).fill('rgba(191, 67, 40, 0.0)');
         pointColors[mIndex] = '#bf4328';
@@ -358,19 +436,16 @@ function updateMonth(mIndex) {
         document.getElementById('dispRain').innerText = `${tempChart.data.datasets[1].data[mIndex]}mm`;
     }
     
-    // 更新地图（触发 Activity 高亮变化）
     renderMap();
 }
 
 monthSlider.addEventListener('input', (e) => updateMonth(e.target.value - 1));
 
-// 初始化图表实例
 function initBaseCharts() {
-    // 1. Rank Chart (Pop Chart)
     const ctxPop = document.getElementById('popChart').getContext('2d');
     popChart = new Chart(ctxPop, {
         type: 'bar',
-        data: { labels: [], datasets: [] }, // 初始为空，等待 updateRankChart 填充
+        data: { labels: [], datasets: [] }, 
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
@@ -380,7 +455,6 @@ function initBaseCharts() {
         }
     });
 
-    // 2. Climate Chart (静态数据)
     const ctxTemp = document.getElementById('tempChart').getContext('2d');
     tempChart = new Chart(ctxTemp, {
         type: 'bar',
@@ -400,24 +474,18 @@ function initBaseCharts() {
     });
 }
 
-// ★★★ 动态更新 Rank 图表 (Top 10) ★★★
 function updateRankChart(visiblePois) {
     if (!popChart) return;
 
-    // 1. 排序：按分数降序
     const sorted = [...visiblePois].sort((a, b) => b.score - a.score);
-    // 2. 取前10
     const top10 = sorted.slice(0, 10);
     
-    // 3. 生成数据和颜色
     const labels = top10.map(p => {
-        // 名字太长截断
         return p.name.length > 12 ? p.name.substring(0, 10) + '..' : p.name;
     });
     const data = top10.map(p => p.score);
-    const colors = top10.map(p => categoryColors[p.cat] || '#3494a6'); // 每个 Bar 的颜色跟随它的 Category
+    const colors = top10.map(p => categoryColors[p.cat] || '#3494a6'); 
 
-    // 4. 更新 Chart
     popChart.data.labels = labels;
     popChart.data.datasets = [{
         data: data,
@@ -568,5 +636,4 @@ window.resetFeed = function() {
     window.resetMapView();
 };
 
-// 启动应用
 initApp();

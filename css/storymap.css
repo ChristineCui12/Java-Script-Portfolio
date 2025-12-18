@@ -1,46 +1,242 @@
-body { margin: 0; padding: 0; font-family: 'Merriweather', serif; overflow-x: hidden; background: #000; }
+/* --- Base Layout --- */
+body, html { margin: 0; padding: 0; width: 100%; height: 100%; font-family: 'Lato', sans-serif; overflow-x: hidden; background: #eee; }
 
-#map { position: fixed; top: 0; left: 0; width: 100%; height: 100vh; z-index: 0; opacity: 0.8; }
-#story { position: relative; z-index: 10; width: 100%; pointer-events: none; }
+/* Enable Map Pointer Events for Zoom */
+#map { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
 
-.step {
+#story-container { position: relative; z-index: 10; pointer-events: none; }
+
+/* --- Slide Layout --- */
+.story-step {
     min-height: 100vh;
     display: flex;
+    align-items: flex-start; /* Align top */
+    padding: 0; 
+    opacity: 0.2;
+    transition: opacity 0.8s ease;
+    position: relative;
+}
+.story-step.active { opacity: 1; }
+
+/* --- Left Sidebar Wrapper (Full Height) --- */
+.sidebar-wrapper {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 32%; /* Fixed width */
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 5px 0 20px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column; /* Stack text and data explanation */
+    pointer-events: auto; /* Allow text selection */
+    z-index: 20;
+}
+
+/* 1. Top Text Area */
+.text-content {
+    padding: 40px 40px 20px 40px;
+    flex-grow: 1; /* Takes available space */
+    overflow-y: auto; /* Scroll if text is too long */
+}
+
+h1 { font-family: 'Cinzel', serif; color: #2c3e50; margin: 0 0 15px 0; font-size: 2.2rem; line-height: 1.2; }
+h2 { color: #bf4328; font-size: 1.1rem; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
+.narrative-text { line-height: 1.7; color: #444; font-size: 1rem; }
+.narrative-text p { margin-bottom: 15px; }
+.chapter-label { font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+
+/* 2. Bottom Data Explanation */
+.data-explanation {
+    background: #f8f9fa;
+    padding: 20px 40px;
+    border-top: 1px solid #eee;
+    font-size: 0.9rem;
+    color: #555;
+}
+.data-explanation h4 { margin: 0 0 10px 0; color: #2c3e50; text-transform: uppercase; font-size: 0.85rem; }
+
+/* --- Right Bottom Screenshot Placeholder --- */
+.screenshot-placeholder {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    width: 400px;
+    height: 280px;
+    border: 3px dashed rgba(255,255,255,0.6);
+    background: rgba(0,0,0,0.2); /* Semi-transparent dark */
+    backdrop-filter: blur(5px);
+    border-radius: 12px;
+    display: flex;
     align-items: center;
-    justify-content: flex-start;
-    padding-left: 5%;
-}
-
-.content-box {
-    width: 35%;
-    background: rgba(0, 0, 0, 0.85);
-    color: #ecf0f1;
-    padding: 40px;
-    border-left: 4px solid #d35400;
+    justify-content: center;
+    transition: all 0.3s;
     pointer-events: auto;
-    opacity: 0;
-    transition: opacity 0.5s, transform 0.5s;
-    transform: translateY(20px);
 }
+.screenshot-placeholder:hover {
+    border-color: #fff;
+    background: rgba(0,0,0,0.4);
+}
+.placeholder-content { text-align: center; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.placeholder-content i { font-size: 40px; margin-bottom: 10px; display: block; }
 
-.content-box.active { opacity: 1; transform: translateY(0); }
+/* --- Floating Legend (Transparent Background) --- */
+.legend-box {
+    position: absolute; /* Relative to viewport via JS or fixed layout */
+    /* Position will be handled by layout flow or fixed relative to sidebar */
+    left: 33%; /* Just right of the sidebar */
+    bottom: 30px;
+    background: transparent; /* Transparent background */
+    padding: 10px;
+    z-index: 30;
+    font-size: 0.9rem;
+    display: none;
+    text-shadow: 0 0 5px rgba(255,255,255,1); /* White glow for readability */
+    pointer-events: none;
+}
+.legend-item { display: flex; align-items: center; margin-bottom: 6px; font-weight: bold; color: #2c3e50; }
+.legend-color { width: 14px; height: 14px; border-radius: 50%; margin-right: 8px; display: inline-block; border: 1px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
 
-h2 { font-size: 2.5rem; margin-top: 0; color: #ffaf40; }
-p { font-size: 1.1rem; line-height: 1.8; color: #bdc3c7; }
-.highlight { color: #fff; font-weight: bold; }
+/* --- Map Markers --- */
 
-.cta-box { text-align: center; border: none; background: rgba(0,0,0,0.9); width: 50%; margin: 0 auto; }
-.btn-main {
-    display: inline-block;
-    margin-top: 20px;
-    padding: 15px 30px;
-    background: #d35400;
-    color: white;
-    text-decoration: none;
-    font-family: sans-serif;
+/* Slide 2: Price Bubble (Using 'Stay' Color) */
+.price-bubble {
+    background: white;
+    border: 2px solid #e0b341; /* Stay Color */
+    border-radius: 20px;
+    padding: 3px 10px;
+    text-align: center;
     font-weight: bold;
-    letter-spacing: 1px;
-    border-radius: 2px;
-    transition: background 0.3s;
+    font-size: 13px;
+    color: #e0b341;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+    white-space: nowrap;
+    position: relative;
+    top: -15px;
 }
-.btn-main:hover { background: #e67e22; }
+.price-bubble::after {
+    content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+    border-width: 6px 6px 0; border-style: solid; border-color: #e0b341 transparent transparent transparent;
+}
+
+/* Slide 4: Target Shape (Using 'Culture' Color) */
+.target-icon {
+    position: relative; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+}
+.target-ring {
+    width: 26px; height: 26px;
+    border: 3px solid #1a3c5a; /* Culture Color */
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+.target-dot {
+    width: 10px; height: 10px;
+    background: #1a3c5a; /* Culture Color */
+    border-radius: 50%;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+}
+@keyframes pulse {
+    0% { transform: scale(0.8); opacity: 1; }
+    100% { transform: scale(1.6); opacity: 0; }
+}
+
+/* Button */
+.btn-enter {
+    display: inline-block; padding: 15px 50px; background: #2c3e50; color: white;
+    text-decoration: none; border-radius: 30px; font-weight: bold; transition: all 0.3s;
+}
+.btn-enter:hover { background: #34495e; transform: translateY(-2px); }
+
+/* Footer Wrapper */
+.content-wrapper { width: 100%; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+
+/* =========================================
+   Mobile Adaptation (Add to bottom of css/storymap.css)
+   ========================================= */
+@media (max-width: 768px) {
+
+    /* 1. Sidebar becomes a Bottom Sheet */
+    /* 文字容器变成底部抽屉样式 */
+    .sidebar-wrapper {
+        width: 100%;       /* 占满屏幕宽度 */
+        height: 40vh;      /* 占据屏幕高度的 40% */
+        top: auto;         /* 取消顶部定位 */
+        bottom: 0;         /* 固定在底部 */
+        left: 0;
+        border-radius: 20px 20px 0 0; /* 顶部圆角，像个卡片 */
+        flex-direction: row; /* 让文字和数据解释左右排列（可选，或者保持上下）*/
+        padding: 0;
+        overflow: hidden; /* 防止圆角被内容撑破 */
+    }
+
+    /* 调整文字区域布局，让它在小屏幕更好看 */
+    .text-content {
+        width: 60%; /* 文字占左边 60% */
+        padding: 20px;
+        overflow-y: auto; /* 内容多时可以滚动 */
+    }
+
+    /* 数据解释区域变小 */
+    .data-explanation {
+        width: 40%;
+        padding: 15px;
+        border-top: none;
+        border-left: 1px solid #eee;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    /* 字体缩小适配手机 */
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    h2 { font-size: 0.9rem; margin-bottom: 10px; }
+    .narrative-text { font-size: 0.85rem; line-height: 1.4; }
+    .narrative-text p { margin-bottom: 8px; }
+    .chapter-label { font-size: 0.65rem; margin-bottom: 8px; }
+    
+    /* 隐藏部分不需要的装饰以节省空间 */
+    .data-explanation h4 { font-size: 0.7rem; }
+    .data-explanation p { font-size: 0.75rem; }
+
+    /* 2. Screenshot becomes smaller and floats above sidebar */
+    /* 截图变小并漂浮在文字容器上方 */
+    .screenshot-placeholder {
+        width: 140px;          /* 宽度变小 */
+        height: 90px;          /* 高度变小 */
+        right: 15px;           /* 靠右 */
+        bottom: 42vh;          /* !!! 关键：位置定在 sidebar 高度(40vh)稍上面一点 */
+        background: rgba(0,0,0,0.6); /* 背景深一点，增加对比度 */
+        border: 2px solid #fff;
+        z-index: 25;           /* 确保它在最上层 */
+    }
+
+    .placeholder-content i { font-size: 24px; margin-bottom: 5px; }
+    .placeholder-content span { font-size: 0.6rem; display: none; /* 手机上隐藏文字只留图标，或者保留看你喜好 */ }
+    .placeholder-content span { display: block; transform: scale(0.8); } /* 如果保留文字，缩小一点 */
+
+    /* 3. Adjust Legend Position */
+    /* 图例移到左上角，防止遮挡底部文字 */
+    .legend-box {
+        left: 15px;
+        bottom: auto; /* 取消底部定位 */
+        top: 80px;    /* 放在顶部，避开 Zoom 控件 */
+        background: rgba(255,255,255,0.8); /* 手机上给一点背景色防止看不清 */
+        padding: 8px;
+    }
+    .legend-item { font-size: 0.8rem; margin-bottom: 3px; }
+    .legend-color { width: 10px; height: 10px; }
+
+    /* 4. Last Slide Adjustment */
+    /* 最后一页的“开始旅程”居中 */
+    #step-4 .content-wrapper {
+        align-items: center;
+    }
+    #step-4 div[style*="background"] {
+        width: 85% !important;
+        padding: 30px 20px !important;
+    }
+}

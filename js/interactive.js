@@ -80,6 +80,10 @@ async function initInteractive() {
             const rawCost = p.Buget || ""; 
             const cost = parseInt(rawCost.replace(/[^0-9]/g, '') || 0);
 
+            // ★★★ 修改点 1：读取 GeoJSON 中的 Rec_Time 字段 ★★★
+            // 如果字段名不同，请修改 p.Rec_Time
+            const recTime = p.Rec_Time || "2 h"; 
+
             return {
                 id: String(p.osm_id), 
                 name: p.name_E || p.name, 
@@ -87,6 +91,7 @@ async function initInteractive() {
                 lng: f.geometry.coordinates[0],
                 price: cost,
                 ele: parseFloat(p.Elevation || 0),
+                time: recTime, // 存储时间
                 cat: p.Filter, 
                 wifi: p.Wifi,
                 park: p.Parking
@@ -106,7 +111,7 @@ async function initInteractive() {
         // 1.7 初始化日期 (如果没有存档，这里会生成默认天数)
         syncDaysWithDate();
 
-        // ★★★ 1.8 尝试加载本地存储的行程 ★★★
+        // 1.8 尝试加载本地存储的行程
         loadSavedTour();
 
     } catch (e) {
@@ -146,11 +151,12 @@ function renderMarkers(wishlistIds) {
                  optionsHtml = `<option disabled>Set dates first</option>`;
             }
 
+            // ★★★ 修改点 2：弹窗中增加时间显示 ★★★
             return `
-                <div style="text-align:center; min-width:160px;">
+                <div style="text-align:center; min-width:180px;">
                     <h4 style="margin:0 0 5px 0;color:#1a3c5a;">${p.name}</h4>
                     <p style="margin:0 0 8px 0;font-size:12px;color:#666;">
-                       Ele: ${p.ele}m | Cost: $${p.price}
+                       <i class="fa-regular fa-clock"></i> ${p.time} | Ele: ${p.ele}m | Cost: $${p.price}
                     </p>
                     <div class="popup-controls">
                         <select id="targetDaySelect-${p.id}" class="popup-day-select">
@@ -250,22 +256,26 @@ function createTripItemDOM(p, dayIndex) {
     const li = document.createElement('li');
     li.className = 'trip-item';
     
-    // ★★★ 核心：保存 ID 到 dataset，方便 Save 功能读取 ★★★
+    // 保存 ID 到 dataset
     li.dataset.id = p.id; 
-    
     li.dataset.lat = p.lat; 
     li.dataset.lng = p.lng; 
     li.dataset.ele = p.ele; 
     li.dataset.price = p.price; 
     li.dataset.name = p.name;
+    // ★★★ 修改点 3：将 Time 存入 dataset ★★★
+    li.dataset.time = p.time; 
     
     const color = routeColors[(dayIndex - 1) % routeColors.length];
     li.style.borderLeftColor = color;
 
+    // ★★★ 修改点 4：在 HTML 中显示 Time (Clock Icon) ★★★
     li.innerHTML = `
         <div class="item-info">
             <span class="item-name">${p.name}</span>
-            <span class="item-meta">Ele: ${p.ele}m</span>
+            <span class="item-meta">
+                <i class="fa-regular fa-clock"></i> ${p.time} &nbsp;|&nbsp; Ele: ${p.ele}m
+            </span>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
             <span class="item-price">$${p.price}</span>
@@ -326,7 +336,9 @@ async function updateGlobalState(isNewAdd) {
                 lat: parseFloat(item.dataset.lat),
                 lng: parseFloat(item.dataset.lng),
                 ele: parseInt(item.dataset.ele || 0),
-                name: item.dataset.name
+                name: item.dataset.name,
+                // 这里也可以获取 item.dataset.time 如果需要计算总时间
+                time: item.dataset.time 
             };
             dayPoints.push(p);
             allPointsFlat.push(p);
@@ -381,6 +393,7 @@ async function updateRoute(groupedPoints) {
                 }).addTo(routeLayer);
             }
         } catch (e) {
+            // Fallback: 直线
             const latlngs = points.map(p => [p.lat, p.lng]);
             L.polyline(latlngs, { color: color, weight: 4, dashArray: '5, 10' }).addTo(routeLayer);
         }
@@ -415,22 +428,21 @@ function updateChart(points) {
 
 
 // ============================================
-// 6. 本地存储 Save & Load 功能 (核心修改)
+// 6. 本地存储 Save & Load 功能
 // ============================================
 
-// 保存按钮绑定的函数
 window.saveTour = function() {
     const saveData = {
         dateFrom: document.getElementById('dateFrom').value,
         dateTo: document.getElementById('dateTo').value,
         budget: document.getElementById('budgetInput').value,
-        itinerary: {} // 结构: { "day1": ["osm_123", "osm_456"], "day2": [...] }
+        itinerary: {} 
     };
 
     // 遍历每一天，收集 ID
     const allLists = document.querySelectorAll('.waypoint-list');
     allLists.forEach((list) => {
-        const dayId = list.id; // e.g., "day1"
+        const dayId = list.id; 
         const items = list.querySelectorAll('.trip-item');
         const ids = [];
         items.forEach(item => {
@@ -441,38 +453,32 @@ window.saveTour = function() {
         }
     });
 
-    // 存入 localStorage (与 UserID 绑定，防止串号)
     const storageKey = `yun_saved_tour_${CURRENT_USER_ID}`;
     localStorage.setItem(storageKey, JSON.stringify(saveData));
 
     alert('Tour Saved locally! You can come back anytime.');
 };
 
-// 绑定到按钮 (虽然HTML里写了 onclick alert，这里重写覆盖)
 const saveBtn = document.querySelector('.btn-save');
 if (saveBtn) {
     saveBtn.onclick = window.saveTour;
 }
 
-// 加载函数 (在 Init 中调用)
 function loadSavedTour() {
     const storageKey = `yun_saved_tour_${CURRENT_USER_ID}`;
     const savedString = localStorage.getItem(storageKey);
     
-    if (!savedString) return; // 没有存档，不做任何事
+    if (!savedString) return; 
 
     console.log("Found saved tour, restoring...");
     const data = JSON.parse(savedString);
 
-    // 1. 恢复输入框
     if (data.dateFrom) document.getElementById('dateFrom').value = data.dateFrom;
     if (data.dateTo) document.getElementById('dateTo').value = data.dateTo;
     if (data.budget) document.getElementById('budgetInput').value = data.budget;
 
-    // 2. 重新生成天数容器
     syncDaysWithDate();
 
-    // 3. 恢复每一天的景点
     if (data.itinerary) {
         for (const [dayId, ids] of Object.entries(data.itinerary)) {
             const list = document.getElementById(dayId);
@@ -490,7 +496,6 @@ function loadSavedTour() {
         }
     }
 
-    // 4. 刷新全局计算
     updateGlobalState(false);
 }
 

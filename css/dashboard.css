@@ -113,8 +113,22 @@ h3::before {
 }
 
 .theme-card { background: linear-gradient(145deg, #ffffff 0%, #fffbf0 100%); border: 1px solid #f0e6d0; }
-.theme-content { display: flex; gap: 12px; align-items: flex-start; }
-#themeImg { width: 70px; height: 70px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+.theme-content { display: flex; gap: 12px; align-items: center; /* 改为居中对齐 */ }
+
+/* ★★★ 新增：Emoji 盒子样式 ★★★ */
+.theme-emoji-box {
+    width: 60px; height: 60px;
+    font-size: 2.5rem; /* 大号字体显示 Emoji */
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.6);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.05);
+    flex-shrink: 0;
+}
+
+/* 原 #themeImg 样式已移除，因为不再使用图片 */
+
 .theme-text h4 { margin: 0 0 6px 0; font-size: 0.95rem; color: var(--color-orange); font-weight: 700; }
 .theme-text p { margin: 0; font-size: 0.75rem; color: var(--color-text-secondary); line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 

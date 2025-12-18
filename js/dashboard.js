@@ -14,7 +14,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const CURRENT_USER_ID = "user_demo_001"; 
+
+// ★★★ 修改 1: 动态用户 ID (解决朋友电脑显示相同内容的问题) ★★★
+function getLocalUserId() {
+    let id = localStorage.getItem('yun_user_id');
+    if (!id) {
+        id = 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('yun_user_id', id);
+    }
+    return id;
+}
+const CURRENT_USER_ID = getLocalUserId();
+console.log("Current User ID:", CURRENT_USER_ID);
 
 // =========================================
 // 1. 数据配置 & 辅助变量
@@ -53,6 +64,8 @@ let userWishlist = new Set();
 let map, markers;
 let popChart = null; 
 let tempChart = null;
+// 新增: 记录详情页当前地点的ID，用于点击Badge跳转
+let currentDetailPostLocationId = null; 
 
 // =========================================
 // 2. 初始化与数据加载
@@ -67,7 +80,6 @@ async function initApp() {
     markers = L.layerGroup().addTo(map);
 
     loadBoundaries();
-
     await syncWishlist();
 
     try {
@@ -102,64 +114,30 @@ async function initApp() {
         updateMonth(6); 
         loadAllPosts();
         initSearch();
+        initCreatePostForm(); // ★★★ 初始化发帖表单逻辑
 
     } catch (error) {
         console.error("Failed to load POI data:", error);
     }
 }
 
-// ★★★ 修改：加载云南行政区划 + 增强样式 + 英文翻译 ★★★
 async function loadBoundaries() {
     try {
         const response = await fetch('https://geo.datav.aliyun.com/areas_v3/bound/530000_full.json');
         const data = await response.json();
-
-        // 中文 -> 英文 映射字典
-        const cityTranslations = {
-            "昆明市": "Kunming",
-            "曲靖市": "Qujing",
-            "玉溪市": "Yuxi",
-            "保山市": "Baoshan",
-            "昭通市": "Zhaotong",
-            "丽江市": "Lijiang",
-            "普洱市": "Pu'er",
-            "临沧市": "Lincang",
-            "楚雄彝族自治州": "Chuxiong",
-            "红河哈尼族彝族自治州": "Honghe",
-            "文山壮族苗族自治州": "Wenshan",
-            "西双版纳傣族自治州": "Xishuangbanna",
-            "大理白族自治州": "Dali",
-            "德宏傣族景颇族自治州": "Dehong",
-            "怒江傈僳族自治州": "Nujiang",
-            "迪庆藏族自治州": "Diqing"
-        };
+        const cityTranslations = { "昆明市": "Kunming", "曲靖市": "Qujing", "玉溪市": "Yuxi", "保山市": "Baoshan", "昭通市": "Zhaotong", "丽江市": "Lijiang", "普洱市": "Pu'er", "临沧市": "Lincang", "楚雄彝族自治州": "Chuxiong", "红河哈尼族彝族自治州": "Honghe", "文山壮族苗族自治州": "Wenshan", "西双版纳傣族自治州": "Xishuangbanna", "大理白族自治州": "Dali", "德宏傣族景颇族自治州": "Dehong", "怒江傈僳族自治州": "Nujiang", "迪庆藏族自治州": "Diqing" };
 
         L.geoJSON(data, {
-            style: {
-                color: '#636e72',    // 改为更深的石板灰 (原 #999)
-                weight: 1.2,         // 稍微加粗 (原 1)
-                opacity: 0.8,        // 透明度降低，显示更明显 (原 0.5)
-                dashArray: '5, 5',   
-                fillOpacity: 0       
-            },
+            style: { color: '#636e72', weight: 1.2, opacity: 0.8, dashArray: '5, 5', fillOpacity: 0 },
             onEachFeature: function(feature, layer) {
                 if (feature.properties && feature.properties.name) {
-                    const cnName = feature.properties.name;
-                    // 查字典，如果没有匹配则显示原中文名
-                    const enName = cityTranslations[cnName] || cnName;
-                    
-                    layer.bindTooltip(enName, {
-                        permanent: false, 
-                        direction: 'center',
-                        className: 'boundary-tooltip'
-                    });
+                    const enName = cityTranslations[feature.properties.name] || feature.properties.name;
+                    layer.bindTooltip(enName, { permanent: false, direction: 'center', className: 'boundary-tooltip' });
                 }
             }
         }).addTo(map);
 
-    } catch (error) {
-        console.error("Could not load boundary data:", error);
-    }
+    } catch (error) { console.error("Could not load boundary data:", error); }
 }
 
 // =========================================
@@ -205,10 +183,7 @@ function renderMap() {
     
     let currentThemeTag = null;
     for (const [tag, months] of Object.entries(activityMapping)) {
-        if (months.includes(currentMonth)) {
-            currentThemeTag = tag;
-            break;
-        }
+        if (months.includes(currentMonth)) { currentThemeTag = tag; break; }
     }
 
     const visiblePois = [];
@@ -219,9 +194,7 @@ function renderMap() {
         visiblePois.push(p);
 
         let isActivityMatch = false;
-        if (currentThemeTag && p.activities && p.activities.includes(currentThemeTag)) {
-            isActivityMatch = true;
-        }
+        if (currentThemeTag && p.activities && p.activities.includes(currentThemeTag)) { isActivityMatch = true; }
 
         const opacity = isActivityMatch ? 1.0 : 0.4; 
         const radius = isActivityMatch ? 8 : 5;
@@ -236,34 +209,22 @@ function renderMap() {
             if(p.cat === 'Culture') iconHtml = '<i class="fa-solid fa-landmark"></i>';
             if(p.cat === 'Food') iconHtml = '<i class="fa-solid fa-utensils"></i>';
             if(p.cat === 'Stay') iconHtml = '<i class="fa-solid fa-bed"></i>';
-
             const size = isActivityMatch ? 34 : 28;
             
             const customIcon = L.divIcon({
                 className: 'custom-div-icon',
                 html: `<div class="marker-pin marker-wishlist cat-${p.cat}" style="width:${size}px;height:${size}px;font-size:${size/2}px;opacity:${finalOpacity}">${iconHtml}</div>`,
-                iconSize: [size, size],
-                iconAnchor: [size/2, size/2]
+                iconSize: [size, size], iconAnchor: [size/2, size/2]
             });
             marker = L.marker([p.lat, p.lng], { icon: customIcon });
-
         } else {
             let color = categoryColors[p.cat] || '#3494a6';
-            
             marker = L.circleMarker([p.lat, p.lng], {
-                radius: radius, 
-                fillColor: color, 
-                color: '#fff', 
-                weight: 1, 
-                fillOpacity: finalOpacity,
-                opacity: finalOpacity
+                radius: radius, fillColor: color, color: '#fff', weight: 1, fillOpacity: finalOpacity, opacity: finalOpacity
             });
         }
         
-        marker.bindPopup(createPopupContent(p, isWishlisted), {
-            maxWidth: 400, minWidth: 300, className: 'custom-popup-wrapper'
-        });
-
+        marker.bindPopup(createPopupContent(p, isWishlisted), { maxWidth: 400, minWidth: 300, className: 'custom-popup-wrapper' });
         p.markerRef = marker;
 
         marker.on('click', function() {
@@ -280,13 +241,7 @@ function renderMap() {
 function createPopupContent(poi, isAdded) {
     const btnClass = isAdded ? 'added' : '';
     const btnText = isAdded ? '<i class="fa-solid fa-heart"></i> Added!' : '<i class="fa-regular fa-heart"></i> Add to Wishlist';
-    
-    const iconsConfig = [
-        { class: 'fa-solid fa-wifi', title: 'WiFi' },
-        { class: 'fa-solid fa-square-parking', title: 'Parking' },
-        { class: 'fa-solid fa-wheelchair', title: 'Accessible' },
-        { class: 'fa-solid fa-utensils', title: 'Dining' }
-    ];
+    const iconsConfig = [{ class: 'fa-solid fa-wifi', title: 'WiFi' }, { class: 'fa-solid fa-square-parking', title: 'Parking' }, { class: 'fa-solid fa-wheelchair', title: 'Accessible' }, { class: 'fa-solid fa-utensils', title: 'Dining' }];
     
     let facHtml = '';
     poi.fac.forEach((has, index) => {
@@ -298,36 +253,17 @@ function createPopupContent(poi, isAdded) {
 
     return `
         <div class="custom-popup">
-            <div class="popup-left">
-                <img src="${poi.img}" class="popup-img" onerror="this.src='https://via.placeholder.com/120'">
-                <a href="${poi.link}" target="_blank" class="official-link-btn">Trip.com Link</a>
-            </div>
+            <div class="popup-left"><img src="${poi.img}" class="popup-img" onerror="this.src='https://via.placeholder.com/120'"><a href="${poi.link}" target="_blank" class="official-link-btn">Trip.com Link</a></div>
             <div class="popup-right">
-                <div class="popup-top-actions">
-                    <div class="action-icon" onclick="${phoneOnClick}" title="Click to see number">
-                        <i class="fa-solid fa-phone"></i>
-                    </div>
-                </div>
+                <div class="popup-top-actions"><div class="action-icon" onclick="${phoneOnClick}" title="Click to see number"><i class="fa-solid fa-phone"></i></div></div>
                 <div class="popup-title">${poi.name}</div>
-                
-                <div class="popup-meta-row">
-                    <span><i class="fa-solid fa-star"></i> Score: ${poi.score}</span>
-                    <span style="color:#ddd">|</span>
-                    <span><i class="fa-solid fa-sack-dollar"></i> $${poi.cost}</span>
-                </div>
-                <div class="popup-meta-row">
-                    <span><i class="fa-regular fa-clock"></i> Rec. Time: ${poi.time} h</span>
-                </div>
-
+                <div class="popup-meta-row"><span><i class="fa-solid fa-star"></i> Score: ${poi.score}</span><span style="color:#ddd">|</span><span><i class="fa-solid fa-sack-dollar"></i> $${poi.cost}</span></div>
+                <div class="popup-meta-row"><span><i class="fa-regular fa-clock"></i> Rec. Time: ${poi.time} h</span></div>
                 <div class="popup-desc">${poi.desc}</div>
                 <div class="popup-facilities">${facHtml}</div>
-                
-                <button class="popup-wishlist-btn ${btnClass}" onclick="window.toggleWishlist(this, '${poi.id}')">
-                    ${btnText}
-                </button>
+                <button class="popup-wishlist-btn ${btnClass}" onclick="window.toggleWishlist(this, '${poi.id}')">${btnText}</button>
             </div>
-        </div>
-    `;
+        </div>`;
 }
 
 // =========================================
@@ -341,11 +277,7 @@ function initSearch() {
     searchInput.addEventListener('input', (e) => {
         const val = e.target.value.toLowerCase();
         resultsList.innerHTML = '';
-        
-        if (val.length < 1) {
-            resultsList.classList.remove('show');
-            return;
-        }
+        if (val.length < 1) { resultsList.classList.remove('show'); return; }
 
         const matches = poiData.filter(p => p.name.toLowerCase().includes(val)).slice(0, 6); 
 
@@ -357,52 +289,33 @@ function initSearch() {
                 li.onclick = () => {
                     searchInput.value = '';
                     resultsList.classList.remove('show');
-                    
                     if(!activeFilters.has('all') && !activeFilters.has(p.cat)) {
                         activeFilters.clear(); activeFilters.add('all');
                         document.querySelectorAll('.tag').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
                         renderMap(); 
                     }
-
                     map.flyTo([p.lat, p.lng], 14, { duration: 1.5 });
-                    setTimeout(() => {
-                        if (p.markerRef) {
-                            p.markerRef.openPopup();
-                            window.loadPostsForLocation(p.id, p.name);
-                        }
-                    }, 1000);
+                    setTimeout(() => { if (p.markerRef) { p.markerRef.openPopup(); window.loadPostsForLocation(p.id, p.name); } }, 1000);
                 };
                 resultsList.appendChild(li);
             });
             resultsList.classList.add('show');
-        } else {
-            resultsList.classList.remove('show');
-        }
+        } else { resultsList.classList.remove('show'); }
     });
 
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.search-wrapper')) {
-            resultsList.classList.remove('show');
-        }
-    });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.search-wrapper')) { resultsList.classList.remove('show'); } });
 }
 
 document.querySelectorAll('.tag').forEach(tag => {
     tag.addEventListener('click', (e) => {
         const selectedCat = e.target.dataset.cat;
-        if (selectedCat === 'all') {
-            activeFilters.clear(); activeFilters.add('all');
-        } else {
+        if (selectedCat === 'all') { activeFilters.clear(); activeFilters.add('all'); } 
+        else {
             activeFilters.delete('all');
-            if (activeFilters.has(selectedCat)) activeFilters.delete(selectedCat);
-            else activeFilters.add(selectedCat);
+            if (activeFilters.has(selectedCat)) activeFilters.delete(selectedCat); else activeFilters.add(selectedCat);
             if (activeFilters.size === 0) activeFilters.add('all');
         }
-        document.querySelectorAll('.tag').forEach(t => {
-            const cat = t.dataset.cat;
-            t.classList.toggle('active', activeFilters.has(cat));
-        });
-        
+        document.querySelectorAll('.tag').forEach(t => { const cat = t.dataset.cat; t.classList.toggle('active', activeFilters.has(cat)); });
         renderMap();
     });
 });
@@ -417,7 +330,6 @@ function updateMonth(mIndex) {
     let themeKey = 4;
     if (monthlyThemes[currentMonth]) themeKey = currentMonth;
     else if ([12, 1, 2].includes(currentMonth)) themeKey = 12;
-    else if ([3, 4, 5].includes(currentMonth)) themeKey = 4;
     else if ([6, 7, 8].includes(currentMonth)) themeKey = 7;
     else if ([9, 10, 11].includes(currentMonth)) themeKey = 10;
 
@@ -435,7 +347,6 @@ function updateMonth(mIndex) {
         document.getElementById('dispTemp').innerText = `${tempChart.data.datasets[0].data[mIndex]}°C`;
         document.getElementById('dispRain').innerText = `${tempChart.data.datasets[1].data[mIndex]}mm`;
     }
-    
     renderMap();
 }
 
@@ -443,66 +354,49 @@ monthSlider.addEventListener('input', (e) => updateMonth(e.target.value - 1));
 
 function initBaseCharts() {
     const ctxPop = document.getElementById('popChart').getContext('2d');
-    popChart = new Chart(ctxPop, {
-        type: 'bar',
-        data: { labels: [], datasets: [] }, 
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            indexAxis: 'y', 
-            plugins: { legend: false }, 
-            scales: { x: { display: false }, y: { grid: { display: false } } } 
-        }
-    });
+    popChart = new Chart(ctxPop, { type: 'bar', data: { labels: [], datasets: [] }, options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: false }, scales: { x: { display: false }, y: { grid: { display: false } } } } });
 
     const ctxTemp = document.getElementById('tempChart').getContext('2d');
-    tempChart = new Chart(ctxTemp, {
-        type: 'bar',
-        data: {
-            labels: ['J','F','M','A','M','J','J','A','S','O','N','D'],
-            datasets: [
-                { type: 'line', label: 'Temp', data: [8,10,13,16,19,22,23,22,20,17,12,9], borderColor: '#bf4328', pointBackgroundColor: '#bf4328', tension: 0.4, yAxisID: 'y' },
-                { type: 'bar', label: 'Rain', data: [5,10,15,30,80,150,180,160,100,50,20,10], backgroundColor: 'rgba(52, 148, 166, 0.6)', yAxisID: 'y1' }
-            ]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { legend: false }, 
-            scales: { x: { grid: { display: false } }, y: { display: false }, y1: { display: false } } 
-        }
-    });
+    tempChart = new Chart(ctxTemp, { type: 'bar', data: { labels: ['J','F','M','A','M','J','J','A','S','O','N','D'], datasets: [{ type: 'line', label: 'Temp', data: [8,10,13,16,19,22,23,22,20,17,12,9], borderColor: '#bf4328', pointBackgroundColor: '#bf4328', tension: 0.4, yAxisID: 'y' }, { type: 'bar', label: 'Rain', data: [5,10,15,30,80,150,180,160,100,50,20,10], backgroundColor: 'rgba(52, 148, 166, 0.6)', yAxisID: 'y1' }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: false }, scales: { x: { grid: { display: false } }, y: { display: false }, y1: { display: false } } } });
 }
 
 function updateRankChart(visiblePois) {
     if (!popChart) return;
-
     const sorted = [...visiblePois].sort((a, b) => b.score - a.score);
     const top10 = sorted.slice(0, 10);
-    
-    const labels = top10.map(p => {
-        return p.name.length > 12 ? p.name.substring(0, 10) + '..' : p.name;
-    });
+    const labels = top10.map(p => p.name.length > 12 ? p.name.substring(0, 10) + '..' : p.name);
     const data = top10.map(p => p.score);
     const colors = top10.map(p => categoryColors[p.cat] || '#3494a6'); 
-
     popChart.data.labels = labels;
-    popChart.data.datasets = [{
-        data: data,
-        backgroundColor: colors,
-        borderRadius: 4,
-        barPercentage: 0.7
-    }];
+    popChart.data.datasets = [{ data: data, backgroundColor: colors, borderRadius: 4, barPercentage: 0.7 }];
     popChart.update();
 }
 
-window.resetMapView = function() {
+// ★★★ 修改 2: Home 键核心逻辑 (重置所有状态) ★★★
+window.handleHomeClick = function() {
+    // 1. 地图归位
     map.flyTo([24.5, 101.5], 7, { duration: 1.5 });
-    window.loadAllPosts();
+    
+    // 2. 清除选中状态
+    currentSelectedLocationId = null;
+    
+    // 3. 右侧面板重置
+    window.loadAllPosts(); // 载入全云南帖子
+    window.showSection('home'); // 确保显示 Feed 页
+    
+    // 4. 重置地图过滤器 UI
+    document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+    document.querySelector('.tag[data-cat="all"]').classList.add('active');
+    activeFilters.clear(); activeFilters.add('all');
+    renderMap();
+};
+
+window.resetMapView = function() {
+    window.handleHomeClick();
 };
 
 // =========================================
-// 5. Yunstagram (右侧)
+// 5. Yunstagram (右侧) & 发帖逻辑
 // =========================================
 
 const contentArea = document.getElementById('appContentArea');
@@ -511,25 +405,36 @@ let currentSelectedLocationId = null;
 
 window.loadPostsForLocation = function(poiId, poiName) {
     currentSelectedLocationId = poiId;
-    updateLocationBadge(poiName, 'location');
+    updateLocationBadge(poiName, 'location', false);
     fetchPosts(poiId);
 };
 
 window.loadAllPosts = function() {
     currentSelectedLocationId = null;
-    updateLocationBadge('All Yunnan', 'globe');
+    updateLocationBadge('All Yunnan', 'globe', false);
     fetchPosts(null);
 };
 
 window.loadMyPosts = function() {
-    updateLocationBadge('My Posts', 'user');
+    updateLocationBadge('My Posts', 'user', false);
     fetchPosts(null, true);
 };
 
-function updateLocationBadge(text, iconType) {
+// ★★★ 修改 3: 点击 Badge 跳转逻辑 ★★★
+window.handleLocationBadgeClick = function() {
+    if (contentArea.querySelector('.detail-view-container') && currentDetailPostLocationId) {
+        const loc = poiData.find(p => p.id === currentDetailPostLocationId);
+        if (loc) window.loadPostsForLocation(loc.id, loc.name);
+    }
+};
+
+function updateLocationBadge(text, iconType, clickable) {
     const badge = document.getElementById('currentLocationTag');
     let icon = iconType === 'location' ? 'fa-location-dot' : (iconType === 'user' ? 'fa-user' : 'fa-globe');
-    if(badge) badge.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${text}</span>`;
+    if(badge) {
+        badge.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${text}</span>`;
+        if (clickable) badge.classList.add('clickable'); else badge.classList.remove('clickable');
+    }
 }
 
 function fetchPosts(locationId = null, onlyMine = false) {
@@ -548,12 +453,10 @@ function fetchPosts(locationId = null, onlyMine = false) {
 }
 
 function renderFeedHTML(posts) {
-    if (posts.length === 0) {
-        contentArea.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">No posts found.</div>';
-        return;
-    }
+    if (posts.length === 0) { contentArea.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">No posts found.</div>'; return; }
     let html = '<div class="feed-container">';
     posts.forEach(item => {
+        const likeCount = item.likes ? item.likes.length : 0;
         html += `
             <div class="feed-card" onclick="window.showPostDetail('${item.id}')">
                 <img src="${item.img}" class="feed-img">
@@ -561,79 +464,186 @@ function renderFeedHTML(posts) {
                     <div class="feed-title">${item.title}</div>
                     <div class="feed-meta">
                         <div class="user-info"><div class="avatar"></div><span>${item.user}</span></div>
-                        <div class="like-box"><i class="fa-regular fa-heart"></i> ${item.likes || 0}</div>
+                        <div class="like-box"><i class="fa-regular fa-heart"></i> ${likeCount}</div>
                     </div>
                 </div>
-            </div>
-        `;
+            </div>`;
     });
     html += '</div>';
     contentArea.innerHTML = html;
 }
 
+// ★★★ 修改 4: 帖子详情页 (增加点赞、评论、Back按钮) ★★★
 window.showPostDetail = async function(docId) {
     const docRef = doc(db, "posts", docId);
+    onSnapshot(docRef, (docSnap) => {
+        if (!docSnap.exists()) return;
+        const item = { id: docSnap.id, ...docSnap.data() };
+        currentDetailPostLocationId = item.locationId;
+        updateLocationBadge(item.locationName || "Unknown Location", "location", true);
+        const likes = item.likes || [];
+        const isLiked = likes.includes(CURRENT_USER_ID);
+        const comments = item.comments || [];
+        let commentsHtml = comments.map(c => `<div class="comment-item"><span class="comment-user">${c.user}:</span>${c.text}</div>`).join('');
+        
+        const detailHtml = `
+            <div class="detail-view-container" style="padding:20px; background:white; min-height:100%;">
+                <div style="display:flex;align-items:center;margin-bottom:15px;color:#666;cursor:pointer;" onclick="window.showSection('home')"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back to Feed</div>
+                <img src="${item.img}" style="width:100%;border-radius:12px;margin-bottom:15px;">
+                <h2 style="font-size:1.2rem;margin-bottom:5px;">${item.title}</h2>
+                <div style="font-size:0.8rem;color:#999;margin-bottom:10px;"><i class="fa-solid fa-location-dot"></i> ${item.locationName}</div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:15px;"><div class="avatar" style="width:30px;height:30px;"></div><span style="font-weight:bold;">${item.user}</span></div>
+                <p style="color:#555;line-height:1.5;">${item.content}</p>
+                <div class="detail-actions">
+                    <button class="${isLiked ? 'action-btn liked' : 'action-btn'}" onclick="window.toggleLike('${item.id}')"><i class="${isLiked ? 'fa-solid fa-heart' : 'fa-regular fa-heart'}"></i> ${likes.length} Likes</button>
+                    <button class="action-btn"><i class="fa-regular fa-comment"></i> ${comments.length} Comments</button>
+                </div>
+                <div class="comments-section">
+                    <div class="comment-input-box"><input type="text" id="commentInput-${item.id}" class="comment-input" placeholder="Add a comment..."><button class="comment-submit-btn" onclick="window.submitComment('${item.id}')">Post</button></div>
+                    <div class="comment-list">${commentsHtml}</div>
+                </div>
+            </div>`;
+        contentArea.innerHTML = detailHtml;
+    });
+};
+
+window.toggleLike = async function(postId) {
+    const docRef = doc(db, "posts", postId);
     const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) return;
-    const item = { id: docSnap.id, ...docSnap.data() };
-    const detailHtml = `
-        <div style="padding:20px; background:white; min-height:100%;">
-            <div style="display:flex;align-items:center;margin-bottom:15px;color:#666;cursor:pointer;" onclick="window.showSection('home')"><i class="fa-solid fa-arrow-left"></i> &nbsp; Back</div>
-            <img src="${item.img}" style="width:100%;border-radius:12px;margin-bottom:15px;">
-            <h2 style="font-size:1.2rem;margin-bottom:10px;">${item.title}</h2>
-            <div style="display:flex;gap:10px;align-items:center;margin-bottom:15px;">
-                <div class="avatar" style="width:30px;height:30px;"></div>
-                <span style="font-weight:bold;">${item.user}</span>
-            </div>
-            <p style="color:#555;">${item.content}</p>
-        </div>
-    `;
-    contentArea.innerHTML = detailHtml;
+    if(docSnap.exists()){
+        const likes = docSnap.data().likes || [];
+        if(likes.includes(CURRENT_USER_ID)) await updateDoc(docRef, { likes: arrayRemove(CURRENT_USER_ID) });
+        else await updateDoc(docRef, { likes: arrayUnion(CURRENT_USER_ID) });
+    }
+};
+
+window.submitComment = async function(postId) {
+    const input = document.getElementById(`commentInput-${postId}`);
+    const text = input.value.trim();
+    if(!text) return;
+    await updateDoc(doc(db, "posts", postId), { comments: arrayUnion({ user: "User " + CURRENT_USER_ID.substr(-3), text: text, time: Timestamp.now() }) });
+    input.value = '';
 };
 
 window.showSection = function(section) {
     createPostContainer.style.display = 'none';
     contentArea.style.display = 'block';
+    
     if (section === 'home') {
-        currentSelectedLocationId ? fetchPosts(currentSelectedLocationId) : window.loadAllPosts();
+        if (!currentSelectedLocationId) window.loadAllPosts();
+        else fetchPosts(currentSelectedLocationId);
     } else if (section === 'create') {
-        if (!currentSelectedLocationId) {
-            alert("Please select a location on the map first!");
-            return;
-        }
         contentArea.style.display = 'none';
         createPostContainer.style.display = 'flex';
-        const loc = poiData.find(p => p.id === currentSelectedLocationId);
-        document.querySelector('#createPostContainer h3').innerText = `Post to: ${loc ? loc.name : 'Unknown'}`;
+        resetCreateForm();
     } else if (section === 'me') {
         window.loadMyPosts();
     }
 };
 
-window.submitNewPost = async function() {
-    const content = document.getElementById('newPostContent').value;
-    if (!content) return alert("Write something!");
-    try {
-        const loc = poiData.find(p => p.id === currentSelectedLocationId);
-        await addDoc(collection(db, "posts"), {
-            title: "Travel Memory",
-            content: content,
-            locationId: String(currentSelectedLocationId),
-            locationName: loc ? loc.name : "Unknown",
-            userId: CURRENT_USER_ID,
-            user: "Explorer",
-            likes: 0,
-            img: "https://images.unsplash.com/photo-1504280590459-f2f293b9e597?q=80&w=2070", 
-            timestamp: Timestamp.now()
+// ★★★ 修改 5: 发帖表单逻辑 (手动搜索 + 自动填充 + Base64图片) ★★★
+function initCreatePostForm() {
+    // 1. 图片预览与Base64转换
+    const imgInput = document.getElementById('postImageInput');
+    const preview = document.getElementById('imgPreview');
+    if (imgInput) {
+        imgInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    preview.style.backgroundImage = `url(${e.target.result})`;
+                    preview.style.display = 'block';
+                    preview.dataset.base64 = e.target.result; // 暂存 Base64
+                };
+                reader.readAsDataURL(file);
+            }
         });
-        document.getElementById('newPostContent').value = '';
-        window.showSection('home');
-    } catch (e) { alert("Failed to post: " + e.message); }
+    }
+
+    // 2. 地点搜索逻辑
+    const locInput = document.getElementById('newPostLocation');
+    const locResults = document.getElementById('postLocationResults');
+    if (locInput) {
+        locInput.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            locResults.innerHTML = '';
+            if(val.length < 1) { locResults.classList.remove('show'); return; }
+            
+            const matches = poiData.filter(p => p.name.toLowerCase().includes(val)).slice(0, 8);
+            if (matches.length > 0) {
+                matches.forEach(p => {
+                    const li = document.createElement('li');
+                    li.className = 'search-item';
+                    li.innerHTML = `<span>${p.name}</span>`;
+                    li.onclick = () => {
+                        locInput.value = p.name;
+                        document.getElementById('newPostLocationId').value = p.id;
+                        locResults.classList.remove('show');
+                    };
+                    locResults.appendChild(li);
+                });
+                locResults.classList.add('show');
+            } else { locResults.classList.remove('show'); }
+        });
+        
+        document.addEventListener('click', (e) => { if (!e.target.closest('.location-input-wrapper')) locResults.classList.remove('show'); });
+    }
+}
+
+function resetCreateForm() {
+    document.getElementById('newPostTitle').value = '';
+    document.getElementById('newPostContent').value = '';
+    document.getElementById('postImageInput').value = '';
+    const preview = document.getElementById('imgPreview');
+    preview.style.display = 'none';
+    delete preview.dataset.base64;
+    
+    const locInput = document.getElementById('newPostLocation');
+    const locIdInput = document.getElementById('newPostLocationId');
+    
+    // 如果是从地图 Marker 点进来的，预填
+    if (currentSelectedLocationId) {
+        const loc = poiData.find(p => p.id === currentSelectedLocationId);
+        if (loc) {
+            locInput.value = loc.name;
+            locIdInput.value = loc.id;
+        }
+    } else {
+        locInput.value = '';
+        locIdInput.value = '';
+    }
+}
+
+window.submitNewPost = async function() {
+    const title = document.getElementById('newPostTitle').value;
+    const content = document.getElementById('newPostContent').value;
+    const locId = document.getElementById('newPostLocationId').value;
+    const locName = document.getElementById('newPostLocation').value;
+    const imgBase64 = document.getElementById('imgPreview').dataset.base64;
+
+    if (!title) return alert("Please add a title!");
+    if (!content) return alert("Write something!");
+    if (!locId || !locName) return alert("Please search and click a valid location from the list!");
+
+    // 使用 Base64 (如果未上传则使用默认图)
+    const finalImg = imgBase64 || "https://images.unsplash.com/photo-1504280590459-f2f293b9e597?q=80&w=2070";
+
+    try {
+        await addDoc(collection(db, "posts"), {
+            title: title, content: content,
+            locationId: String(locId), locationName: locName,
+            userId: CURRENT_USER_ID, user: "User " + CURRENT_USER_ID.substr(-3),
+            likes: [], comments: [], img: finalImg, timestamp: Timestamp.now()
+        });
+        window.handleHomeClick(); // 发完帖直接回全云南首页
+    } catch (e) { 
+        alert("Failed to post: " + e.message + " (Image might be too large)"); 
+    }
 };
 
 window.resetFeed = function() {
-    window.loadAllPosts();
-    window.resetMapView();
+    window.handleHomeClick();
 };
 
 initApp();

@@ -285,7 +285,13 @@ h3::before {
     display: inline-flex; align-items: center; gap: 5px;
     background: rgba(52, 148, 166, 0.1); color: var(--color-teal);
     padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    transition: 0.2s; cursor: default;
 }
+
+/* ★★★ 新增：可点击的地点 Badge 样式 (配合 JS 跳转功能) ★★★ */
+.location-badge.clickable { cursor: pointer; background: var(--color-teal); color: white; }
+.location-badge.clickable:hover { background: var(--color-dark-blue); }
+
 .refresh-icon { cursor: pointer; color: var(--color-text-secondary); }
 .refresh-icon:hover { color: var(--color-teal); }
 
@@ -324,6 +330,30 @@ h3::before {
 .user-info span { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar { width: 16px; height: 16px; border-radius: 50%; background: #e0e0e0; }
 
+/* ★★★ 新增：发帖表单相关样式 (Create Post Form) ★★★ */
+.form-label { display: block; margin-bottom: 5px; font-size: 0.8rem; color: #666; font-weight: bold; margin-top: 10px; }
+.form-input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; margin-bottom: 5px; font-size: 0.9rem; }
+
+/* 手动搜索地点的容器 */
+.location-input-wrapper { position: relative; width: 100%; }
+/* 确保表单内的搜索结果悬浮在最上层 */
+.location-input-wrapper .search-results-list { max-height: 150px; top: 100%; z-index: 2000; box-shadow: 0 5px 20px rgba(0,0,0,0.15); }
+
+/* ★★★ 新增：帖子详情页 & 评论区样式 (Detail View & Comments) ★★★ */
+.detail-actions { padding: 10px 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; margin: 15px 0; display: flex; justify-content: space-around; }
+.action-btn { background: none; border: none; font-size: 0.9rem; color: #666; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.action-btn:hover { color: var(--color-orange); }
+.action-btn.liked { color: var(--color-orange); font-weight: bold; }
+
+.comments-section { margin-top: 15px; }
+.comment-input-box { display: flex; gap: 10px; margin-bottom: 15px; }
+.comment-input { flex: 1; padding: 8px; border: 1px solid #eee; border-radius: 20px; background: #f9f9f9; font-size: 0.85rem; }
+.comment-submit-btn { border: none; background: var(--color-teal); color: white; border-radius: 20px; padding: 0 15px; font-weight: bold; cursor: pointer; font-size: 0.8rem; }
+.comment-list { display: flex; flex-direction: column; gap: 10px; }
+.comment-item { font-size: 0.8rem; color: #555; background: #f9f9f9; padding: 8px 12px; border-radius: 8px; }
+.comment-user { font-weight: bold; color: var(--color-dark-blue); margin-right: 5px; }
+
+/* Footer */
 .xhs-footer { 
     flex-shrink: 0; height: 55px; background: white; border-top: 1px solid rgba(0,0,0,0.06); 
     display: flex; justify-content: space-around; align-items: center; padding: 0 10px; z-index: 20; 
